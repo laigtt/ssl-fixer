@@ -1,14 +1,16 @@
 <?php
 /**
  * @package SSL_Fixer
- * @version 0.1
+ * @version 0.3
  */
 /*
 Plugin Name: SSL Fixer
 Plugin URI: https://wordpress.org/extend/plugins/ssl-fixer/
+Text Domain: ssl-fixer
+License: GPLv2 or later
 Description: An extremely simple and lightweight plugin that forces your SSL to work!
-Author: Frank Altera Novoa
-Version: 0.1
+Author: Stalwart Fox
+Version: 0.3
 Author URI: https://stalwartfox.net/
 */
 /*  Copyright 2014  Frank Altera Novoa  (email : contact@stalwartfox.net)
@@ -24,8 +26,11 @@ Author URI: https://stalwartfox.net/
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 defined('ABSPATH') or die("You do not have access to this page!");
+include_once('sf-admin.php');
+include_once('sf-utilities.php');
 
-function fix_insecure_links() { //Fix insecure links within the database.
+//Fix insecure links within the database.
+function fix_insecure_links() {
 	global $wpdb;
 
 	$table = $wpdb->prefix . 'options';
@@ -45,17 +50,47 @@ function fix_insecure_links() { //Fix insecure links within the database.
 	$wpdb->query($query);
 }
 
-function fix_wpconfig() { //Modify any insecure links within the wp-config.php file
+//Modify any insecure links within the wp-config.php file
+function fix_wpconfig() {
 	$path = ABSPATH . 'wp-config.php';
 	$contents = file_get_contents($path);
 	$contents = str_replace('http://', 'https://', $contents);
 	file_put_contents($path, $contents);
 }
 
+//Execute the changes
 function fix_it() {
 	fix_wpconfig();
 	fix_insecure_links();
+
+	add_option('ssl_fixed', 'true');
 }
 
-register_activation_hook(__FILE__, 'fix_it');
+//Create variables for the plugin
+register_activation_hook(__FILE__, 'set_fixer_options');
+function set_fixer_options() {
+	add_option('ssl_fixed', 'false');
+	set_transient('ssl_fixer_activation', true, 5);
+}
+
+//Delete variables upon deactivation
+register_deactivation_hook(__FILE__, 'unset_fixer_options');
+function unset_fixer_options() {
+	delete_option('ssl_fixed');
+}
+
+//Check activation variable, if not true, display notice for a unique time
+add_action('admin_notices', 'activation_notice');
+
+//Activate plugin on click
+if (isset($_POST['fixme'])) {
+	include_once(ABSPATH . 'wp-includes/pluggable.php');
+	$nonce = $_REQUEST['_wpnonce'];
+	if (current_user_can('manage_options') && wp_verify_nonce($nonce, 'sslfixer_nonce_action')) {
+		fix_it();
+		notice_message( __( 'Your SSL is fixed and enforced!', 'ssl-fixer'), 'success');
+	} else {
+		notice_message( __( 'Something went wrong! SSL not fixed!', 'ssl-fixer' ), 'error');
+	}
+}
 ?>
